@@ -35,12 +35,21 @@ print("READY")
 frame_count = 0
 init_time = False
 
+poller = zmq.Poller()
+poller.register(socket, zmq.POLLIN)
+
 try:
     # DO THINGS
     while True:
         # wait for client request
-        message = socket.recv()
-        print("Received image")
+
+        socks = dict(poller.poll(timeout=10000))  # timeout after 5s
+        if socket in socks and socks[socket] == zmq.POLLIN:
+            message = socket.recv()
+            print("Received image")
+        else:
+            print("Client disconnected")
+            break
 
         if (init_time == False):
             init_time = datetime.datetime.now()
