@@ -1,6 +1,7 @@
 import zmq
 import cv2
 import time
+import sys
 
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
@@ -14,20 +15,35 @@ cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 i=0
-while True:
-    ret, frame = cap.read()
-    i+=1
-    # convert the image to JPEG format
-    image = cv2.imencode('.jpg', frame, encode_param)[1].tobytes()
 
-    # send the image to the server
-    socket.send(image)
-    print(f"Image {i} sent to server")
+try:
+    while True:
+        try:
+            ret, frame = cap.read()
+            i+=1
+            # convert the image to JPEG format
+            image = cv2.imencode('.jpg', frame, encode_param)[1].tobytes()
 
-    # wait for confirmation from server
-    message = socket.recv()
-    print(message.decode())
-    
+            # send the image to the server
+            socket.send(image)
+            print(f"Image {i} sent to server")
+
+            # wait for confirmation from server
+            message = socket.recv().decode()
+            print(message)
+
+            if (message == "EXIT"):
+                break
+
+        except zmq.error.ZMQError as e:
+            print(f"Socket error: {e}")
+            break
+
+except KeyboardInterrupt:
+    print("Interrupted")
 
 # release resources
 cap.release()
+socket.close()
+context.term()
+sys.exit()
