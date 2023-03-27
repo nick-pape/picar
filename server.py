@@ -38,6 +38,8 @@ init_time = False
 poller = zmq.Poller()
 poller.register(socket, zmq.POLLIN)
 
+last_visible = set()
+
 try:
     # DO THINGS
     while True:
@@ -46,7 +48,7 @@ try:
         socks = dict(poller.poll(timeout=10000))  # timeout after 5s
         if socket in socks and socks[socket] == zmq.POLLIN:
             message = socket.recv()
-            print("Received image")
+            #print("Received image")
         else:
             print("Client disconnected")
             break
@@ -78,6 +80,18 @@ try:
 
         # allegedly works
         labels = coco.loadCats(preds[0]["labels"].numpy())
+
+        cur_visible = {i["name"] for i in labels}
+
+        for i in cur_visible.difference(last_visible):
+            print("+", i)
+
+        for i in last_visible.difference(cur_visible):
+            print("-", i)
+
+        last_visible = cur_visible
+
+        #print(labels)
         annot_labels = ["{}-{:.2f}".format(label["name"], prob) for label, prob in zip(labels, preds[0]["scores"].detach().numpy())]
 
 
@@ -99,7 +113,7 @@ try:
         elapsed_seconds = ( datetime.datetime.now() - init_time).total_seconds()
         frame_count += 1
 
-        print(f'FPS: {frame_count / elapsed_seconds}')
+        # print(f'FPS: {frame_count / elapsed_seconds}')
 
         # Wait for 1ms and check if a key is pressed
         key = cv2.waitKey(1)
