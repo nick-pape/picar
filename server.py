@@ -1,18 +1,12 @@
 import zmq
-import os
 import cv2
 import numpy as np
-import torch
 import sys
-from torchvision.models.detection import fasterrcnn_resnet50_fpn
-from torchvision.models.detection import fasterrcnn_mobilenet_v3_large_320_fpn
-from torchvision.models.detection import ssdlite320_mobilenet_v3_large
-from pycocotools.coco import COCO
-from torchvision.utils import draw_bounding_boxes
-from torchvision.transforms.functional import to_pil_image
-from PIL import Image
-from torchvision.transforms.functional import pil_to_tensor
-import datetime
+
+from image_helper import ImageHelper
+from object_detection import ObjectDetector
+from fps_counter import FpsCounter
+from label_diff import LabelDiff
 
 print("Setting up 0MQ")
 context = zmq.Context()
@@ -20,15 +14,7 @@ socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")   # binds to all network interfaces
 
 print("Setting up CNN")
-#object_detection_model = fasterrcnn_resnet50_fpn(pretrained=True, progress=False)
-#object_detection_model = fasterrcnn_mobilenet_v3_large_320_fpn(pretrained=True)
-object_detection_model = ssdlite320_mobilenet_v3_large(pretrained=True)
-object_detection_model.eval()
-THRESHOLD = 0.5
-
-print("Setting up annotations")
-annFile='annotations/instances_val2017.json'
-coco=COCO(annFile)
+object_detector = ObjectDetector()
 
 print("READY")
 
@@ -38,92 +24,44 @@ init_time = False
 poller = zmq.Poller()
 poller.register(socket, zmq.POLLIN)
 
-last_visible = set()
+fps_counter = FpsCounter()
+label_diff = LabelDiff()
 
 try:
-    # DO THINGS
     while True:
-        # wait for client request
-
-        socks = dict(poller.poll(timeout=10000))  # timeout after 5s
+        # Receive an image from RPi
+        socks = dict(poller.poll(timeout=10000))
         if socket in socks and socks[socket] == zmq.POLLIN:
             message = socket.recv()
-            #print("Received image")
         else:
             print("Client disconnected")
             break
 
-        if (init_time == False):
-            init_time = datetime.datetime.now()
+        fps_counter.start()
 
-        # Decode the image data into a numpy array
-        image_array = np.frombuffer(message, dtype=np.uint8)
+        image_int_tensor = ImageHelper.ImageBufferToIntegerTensor(message)
 
-        img = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+        preds, labels = object_detector.getLabels(image_int_tensor)
 
-        img_pil = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-        
-        int_tensor = pil_to_tensor(img_pil)
-        
-        img_tensor = int_tensor / 255.0
-        img_tensor = img_tensor.unsqueeze(dim=0)
+        bounded_image = ImageHelper.IntegerTensorToCV(
+            object_detector.getBoundedImage(image_int_tensor, labels, preds)
+        )
 
-        #print(img_tensor.shape)
-
-        preds = object_detection_model(img_tensor)
-
-        #print(preds)
-
-        preds[0]["boxes"] = preds[0]["boxes"][preds[0]["scores"] > THRESHOLD]
-        preds[0]["labels"] = preds[0]["labels"][preds[0]["scores"] > THRESHOLD]
-        preds[0]["scores"] = preds[0]["scores"][preds[0]["scores"] > THRESHOLD]
-
-        # allegedly works
-        labels = coco.loadCats(preds[0]["labels"].numpy())
-
-        cur_visible = {i["name"] for i in labels}
-
-        for i in cur_visible.difference(last_visible):
-            print("+", i)
-
-        for i in last_visible.difference(cur_visible):
-            print("-", i)
-
-        last_visible = cur_visible
-
-        #print(labels)
-        annot_labels = ["{}-{:.2f}".format(label["name"], prob) for label, prob in zip(labels, preds[0]["scores"].detach().numpy())]
-
-
-        bounded_image = draw_bounding_boxes(image=int_tensor,
-                                    boxes=preds[0]["boxes"],
-                                    labels=annot_labels,
-                                    colors=["red" if label["name"]=="person" else "green" for label in labels],
-                                    width=2)
-
-
-        # change back to bounded_image
-        pil_image = to_pil_image(bounded_image)
-        cv2_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-
-        # Display the image using cv2.imshow()
-        cv2.imshow('Image', cv2_image)
+        label_diff.printDiff(labels)
 
         # Calculate the elapsed seconds
-        elapsed_seconds = ( datetime.datetime.now() - init_time).total_seconds()
-        frame_count += 1
+        fps_counter.addFrame()
+        print(f'FPS: {fps_counter.getFps()}')
 
-        # print(f'FPS: {frame_count / elapsed_seconds}')
-
-        # Wait for 1ms and check if a key is pressed
-        key = cv2.waitKey(1)
+        cv2.imshow('Image', bounded_image)
+        key = cv2.waitKey(1) # Wait for 1ms and check if a key is pressed
 
         # Exit the loop if 'q' is pressed
         if key == ord('q'):
             raise KeyboardInterrupt()
 
         # send confirmation to the client
-        socket.send(b"Image received successfully")
+        socket.send(b"Ready for next image")
 
 except zmq.error.ZMQError:
     print("Client disconnected")
