@@ -1,75 +1,76 @@
-import zmq
-import cv2
-import numpy as np
 import sys
+import cv2
+import zmq
 
 from image_helper import ImageHelper
+
 from object_detection import ObjectDetector
 from fps_counter import FpsCounter
 from label_diff import LabelDiff
 
-print("Setting up 0MQ")
-context = zmq.Context()
-socket = context.socket(zmq.REP)
-socket.bind("tcp://*:5555")   # binds to all network interfaces
 
-print("Setting up CNN")
-object_detector = ObjectDetector()
+class Server():
+    def __init__(self):
+        self.init_zmq()
+        self.init_model()
+        self.init_utils()
+        self.connected = False
+        print("READY")
 
-print("READY")
+    def init_zmq(self):
+        print("Initializing 0MQ")
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.REP)
+        self.socket.bind("tcp://*:5555")   # binds to all network interfaces
 
-frame_count = 0
-init_time = False
+        self.poller = zmq.Poller()
+        self.poller.register(self.socket, zmq.POLLIN)
 
-poller = zmq.Poller()
-poller.register(socket, zmq.POLLIN)
+    def init_model(self):
+        print("Initializing Model")
+        self.object_detector = ObjectDetector()
 
-fps_counter = FpsCounter()
-label_diff = LabelDiff()
+    def init_utils(self):
+        print("Initializing Utilities")
+        self.fps_counter = FpsCounter()
+        self.label_diff = LabelDiff()
+        
+    def execute(self):
+        message = self.recv_with_timeout(30000 if not self.connected else 1000)
+        self.connected = True
 
-try:
-    while True:
-        # Receive an image from RPi
-        socks = dict(poller.poll(timeout=10000))
-        if socket in socks and socks[socket] == zmq.POLLIN:
-            message = socket.recv()
-        else:
-            print("Client disconnected")
-            break
-
-        fps_counter.start()
+        self.fps_counter.start()
 
         image_int_tensor = ImageHelper.ImageBufferToIntegerTensor(message)
 
-        preds, labels = object_detector.getLabels(image_int_tensor)
+        preds, labels = self.object_detector.getLabels(image_int_tensor)
 
         bounded_image = ImageHelper.IntegerTensorToCV(
-            object_detector.getBoundedImage(image_int_tensor, labels, preds)
+            self.object_detector.getBoundedImage(image_int_tensor, labels, preds)
         )
 
-        label_diff.printDiff(labels)
+        self.label_diff.printDiff(labels)
 
         # Calculate the elapsed seconds
-        fps_counter.addFrame()
-        print(f'FPS: {fps_counter.getFps()}')
+        self.fps_counter.addFrame()
+        # print(f'FPS: {self.fps_counter.getFps()}')
 
         cv2.imshow('Image', bounded_image)
-        key = cv2.waitKey(1) # Wait for 1ms and check if a key is pressed
-
-        # Exit the loop if 'q' is pressed
-        if key == ord('q'):
-            raise KeyboardInterrupt()
+        cv2.waitKey(1)
 
         # send confirmation to the client
-        socket.send(b"Ready for next image")
+        self.socket.send(b"Ready for next image")
 
-except zmq.error.ZMQError:
-    print("Client disconnected")
+    def recv_with_timeout(self, timeout = 10000):
+        # Receive an image from RPi
+        socks = dict(self.poller.poll(timeout=10000))
+        if self.socket in socks and socks[self.socket] == zmq.POLLIN:
+            return self.socket.recv()
+        else:
+            print("Client disconnected")
+            raise Exception("Client disconnected")
 
-except KeyboardInterrupt:
-    print("Interrupted")
-
-socket.close()
-context.term()
-cv2.destroyAllWindows()
-sys.exit()
+    def close(self):
+        self.socket.close()
+        self.context.term()
+        cv2.destroyAllWindows()
