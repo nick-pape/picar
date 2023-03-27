@@ -16,28 +16,31 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 i=0
 
+poller = zmq.Poller()
+poller.register(socket, zmq.POLLIN)
+
 try:
     while True:
-        try:
-            ret, frame = cap.read()
-            i+=1
-            # convert the image to JPEG format
-            image = cv2.imencode('.jpg', frame, encode_param)[1].tobytes()
+        ret, frame = cap.read()
+        i+=1
+        # convert the image to JPEG format
+        image = cv2.imencode('.jpg', frame, encode_param)[1].tobytes()
 
-            # send the image to the server
-            socket.send(image)
-            print(f"Image {i} sent to server")
+        # send the image to the server
+        socket.send(image)
+        print(f"Image {i} sent to server")
 
-            # wait for confirmation from server
+        # wait for confirmation from server
+        socks = dict(poller.poll(timeout=10000))  # timeout after 1s
+        if socket in socks and socks[socket] == zmq.POLLIN:
             message = socket.recv().decode()
             print(message)
-
-            if (message == "EXIT"):
-                break
-
-        except zmq.error.ZMQError as e:
-            print(f"Socket error: {e}")
+        else:
+            print("Server disconnected")
             break
+
+except zmq.error.ZMQError as e:
+    print(f"Socket error: {e}")
 
 except KeyboardInterrupt:
     print("Interrupted")
