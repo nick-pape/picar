@@ -9,6 +9,7 @@ from object_detection import ObjectDetector
 from fps_counter import FpsCounter
 from label_diff import LabelDiff
 
+from joystick import getThrottle
 
 class Server():
     def __init__(self):
@@ -60,24 +61,31 @@ class Server():
 
         image_int_tensor = ImageHelper.ImageBufferToIntegerTensor(message)
 
-        preds, labels = self.object_detector.getLabels(image_int_tensor)
+        #preds, labels = self.object_detector.getLabels(image_int_tensor)
 
-        bounded_image = ImageHelper.IntegerTensorToCV(
-            self.object_detector.getBoundedImage(image_int_tensor, labels, preds)
-        )
+        #bounded_image = ImageHelper.IntegerTensorToCV(
+        #    self.object_detector.getBoundedImage(image_int_tensor, labels, preds)
+        #)
 
-        self.label_diff.printDiff(labels)
+        #self.label_diff.printDiff(labels)
 
         # Calculate the elapsed seconds
         self.fps_counter.addFrame()
         # print(f'FPS: {self.fps_counter.getFps()}')
 
-        final_image = self.add_timestamp(bounded_image)
+        final_image =  ImageHelper.IntegerTensorToCV(image_int_tensor)
+
+        #final_image = self.add_timestamp(bounded_image)
         self.show_image(final_image)
         self.video.write(final_image)
 
+        left, right = getThrottle()
+
         # send confirmation to the client
-        self.socket.send(b"Ready for next image")
+        msg = "{} {}".format(left, right)
+        print(msg)
+
+        self.socket.send(msg.encode())
 
     def add_timestamp(self, image):
         # get the current date and time
