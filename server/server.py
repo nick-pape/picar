@@ -3,6 +3,7 @@ import time
 
 import cv2
 import zmq
+import math
 
 from image_helper import ImageHelper
 from object_detection import ObjectDetector
@@ -75,17 +76,53 @@ class Server():
 
         final_image =  ImageHelper.IntegerTensorToCV(image_int_tensor)
 
-        #final_image = self.add_timestamp(bounded_image)
+        left, right = getThrottle()
+
+        final_image = self.add_servo_monitor(final_image, left, right)
+        final_image = self.add_timestamp(final_image)
         self.show_image(final_image)
         self.video.write(final_image)
 
-        left, right = getThrottle()
 
         # send confirmation to the client
         msg = "{} {}".format(left, right)
         print(msg)
 
         self.socket.send(msg.encode())
+
+    def add_servo_monitor(self, image, left, right):
+        width = 20
+        max_height = 10
+        main_start = (5, 50)
+
+        green = (0, 255, 0)
+        red = (0, 0, 255)
+        yellow = (0, 255, 255)
+
+        cutoff = 0.05
+
+        thickness = -1
+
+        left_start = main_start
+        right_start = (main_start[0] + width, main_start[1])
+
+        def getRectangle(start, strength):
+            height = int(-strength * max_height)
+        
+            # Ending coordinate, here (220, 220)
+            # represents the bottom right corner of rectangle
+            end_point = (start[0] + width, start[1] + height)
+
+            color = yellow if abs(strength) < cutoff else \
+                red if strength < 0 else green
+
+            return start, end_point, color, thickness
+
+        image = cv2.rectangle(image, *getRectangle(left_start, left))
+        image = cv2.rectangle(image, *getRectangle(right_start, right))
+  
+        return image
+
 
     def add_timestamp(self, image):
         # get the current date and time
