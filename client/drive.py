@@ -1,7 +1,27 @@
-from adafruit_servokit import ServoKit
+class BaseDrivetrain():
+    def setThrottle(self, left: float, right: float):
+        raise NotImplementedError()
+    
+    def forward(self, throttle: float = 1.0):
+        raise NotImplementedError()
 
-class FourWheelDrivetrain:
+    def back(self, throttle: float = 1.0):
+        raise NotImplementedError()
+    
+    def stop(self):
+        raise NotImplementedError()
+    
+    def left(self, throttle: float = 1.0):
+        raise NotImplementedError()
+    
+    def right(self, throttle: float = 1.0):
+        raise NotImplementedError()
+
+
+class FourWheelDrivetrain(BaseDrivetrain):
     def __init__(self):
+        super().__init__()
+        from adafruit_servokit import ServoKit
         kit = ServoKit(channels=8)
         servos = kit.continuous_servo
 
@@ -20,17 +40,17 @@ class FourWheelDrivetrain:
 			self._back_right
 		]
 
-    def setThrottle(self, left, right):
+    def setThrottle(self, left: float, right: float):
         for servo in self.right_side:
             servo.throttle = left
         for servo in self.left_side:
             servo.throttle = right
 
-    def forward(self, throttle = 1):
+    def forward(self, throttle: float = 1.0):
         for servo in self.all:
             servo.throttle = throttle
 
-    def back(self, throttle = 1):
+    def back(self, throttle: float = 1.0):
         for servo in self.all:
             servo.throttle = throttle
 
@@ -38,20 +58,34 @@ class FourWheelDrivetrain:
         for servo in self.all:
             servo.throttle = 0
 
-    def left(self, throttle = 1):
+    def left(self, throttle: float = 1.0):
         for servo in self.right_side:
             servo.throttle = throttle
         for servo in self.left_side:
             servo.throttle = -throttle
 
-    def right(self, throttle = 1):
+    def right(self, throttle: float = 1.0):
         for servo in self.right_side:
             servo.throttle = -throttle
         for servo in self.left_side:
             servo.throttle = throttle
-            
-    def right(self, throttle = 1):
-        for servo in self.right_side:
-            servo.throttle = -throttle
-        for servo in self.left_side:
-            servo.throttle = throttle
+
+
+class MockFourWheelDrivetrain(BaseDrivetrain):
+    def setThrottle(self, left: float, right: float):
+        print(f"Drivetrain.setThrottle({left}, {right})")
+    
+    def forward(self, throttle: float = 1.0):
+        print(f"Drivetrain.forward({throttle})")
+
+    def back(self, throttle: float = 1.0):
+        print(f"Drivetrain.back({throttle})")
+    
+    def stop(self):
+        print(f"Drivetrain.stop()")
+    
+    def left(self, throttle: float = 1.0):
+        print(f"Drivetrain.setThrottle({throttle})")
+    
+    def right(self, throttle: float = 1.0):
+        print(f"Drivetrain.setThrottle({throttle})")

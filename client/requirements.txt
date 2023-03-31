@@ -2,3 +2,4 @@ opencv-python
 numpy
 pyzmq
 adafruit-circuitpython-servokit
+argparse
