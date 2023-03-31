@@ -3,6 +3,8 @@ import cv2
 import time
 import sys
 
+from drive import FourWheelDrivetrain
+
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
 socket.connect("tcp://10.0.0.5:5555")   # connect to server
@@ -19,6 +21,8 @@ i=0
 poller = zmq.Poller()
 poller.register(socket, zmq.POLLIN)
 
+drive = FourWheelDrivetrain()
+
 try:
     while True:
         ret, frame = cap.read()
@@ -28,13 +32,21 @@ try:
 
         # send the image to the server
         socket.send(image)
-        print(f"Image {i} sent to server")
+        # print(f"Image {i} sent to server")
 
         # wait for confirmation from server
         socks = dict(poller.poll(timeout=10000))  # timeout after 1s
         if socket in socks and socks[socket] == zmq.POLLIN:
             message = socket.recv().decode()
             print(message)
+            parts = message.split(' ')
+            left = float(parts[0])
+            right = float(parts[1])
+
+
+
+            drive.setThrottle(left, right)
+
         else:
             print("Server disconnected")
             break
@@ -44,6 +56,8 @@ except zmq.error.ZMQError as e:
 
 except KeyboardInterrupt:
     print("Interrupted")
+
+drive.stop()
 
 # release resources
 cap.release()
