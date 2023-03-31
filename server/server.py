@@ -3,7 +3,7 @@ import time
 
 import cv2
 import zmq
-import math
+import numpy as np
 
 from image_helper import ImageHelper
 from object_detection import ObjectDetector
@@ -55,7 +55,7 @@ class Server():
         self.video = cv2.VideoWriter('output.mp4', fourcc, 5, (640, 480))
 
     def execute(self):
-        message = self.recv_with_timeout(30000 if not self.connected else 1000)
+        message = self.recv_with_timeout(30000 if not self.connected else 2000)
         self.connected = True
 
         self.fps_counter.start()
@@ -78,6 +78,7 @@ class Server():
 
         left, right = getThrottle()
 
+        final_image = self.detect_sidewalk(final_image)
         final_image = self.add_servo_monitor(final_image, left, right)
         final_image = self.add_timestamp(final_image)
         self.show_image(final_image)
@@ -89,6 +90,48 @@ class Server():
         print(msg)
 
         self.socket.send(msg.encode())
+
+
+    def detect_sidewalk(self, image):
+        # Convert the image to grayscale
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Apply Canny edge detection
+        edges = cv2.Canny(gray, 50, 150, apertureSize=3)
+
+        # Apply Hough transform to detect straight lines
+        lines = cv2.HoughLinesP(edges, rho=1, theta=np.pi/180, threshold=50, minLineLength=50, maxLineGap=10)
+
+        # Convert the lines to a binary image
+        line_image = np.zeros_like(gray)
+        for x1, y1, x2, y2 in lines[:, 0]:
+            cv2.line(line_image, (x1, y1), (x2, y2), 255, 2)
+
+        # Combine the edge and line images
+        combined = cv2.bitwise_and(edges, line_image)
+
+        # Find contours in the combined image
+        contours, hierarchy = cv2.findContours(combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Find the contour with the largest area
+        largest_contour = max(contours, key=cv2.contourArea)
+
+        # Compute the convex hull of the largest contour
+        hull = cv2.convexHull(largest_contour)
+
+        # Find the minimum area rectangle that encloses the convex hull
+        rect = cv2.minAreaRect(hull)
+        box = cv2.boxPoints(rect)
+        box = np.int0(box)
+
+        # Draw the minimum area rectangle on the input image
+        cv2.drawContours(image, [box], 0, (0, 0, 255), 2)
+
+        # Compute the predicted path along the sidewalk
+        path = np.array([box[0], box[1], box[2], box[3], box[0]])
+        cv2.polylines(image, [path], False, (0, 255, 0), 2)
+
+        return image
 
     def add_servo_monitor(self, image, left, right):
         width = 20
