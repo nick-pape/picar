@@ -78,7 +78,7 @@ class Server():
 
         left, right = getThrottle()
 
-        final_image = self.detect_sidewalk(final_image)
+        #final_image = self.detect_sidewalk(final_image)
         final_image = self.add_servo_monitor(final_image, left, right)
         final_image = self.add_timestamp(final_image)
         self.show_image(final_image)

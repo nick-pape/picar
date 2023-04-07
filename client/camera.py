@@ -5,8 +5,8 @@ from collections import namedtuple
 PictureDimensions = namedtuple('PictureDimensions', 'width height')
 
 class BaseCamera():
-    def __init__(self, dimensions: PictureDimensions = (640, 480)):
-        self.dimensions = dimensions
+    def __init__(self, dimensions: PictureDimensions = PictureDimensions(640, 480)):
+        self.dimensions: PictureDimensions = dimensions
         self.encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]   # JPEG quality (0-100)
 
     def snap(self):

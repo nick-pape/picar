@@ -6,3 +6,4 @@ torch
 torchvision
 pygame
 pillow
+argparse

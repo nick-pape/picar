@@ -43,7 +43,6 @@ joystick = pygame.joystick.Joystick(0)
 joystick.init()
 
 def getThrottle():
-
     # Handle Pygame events
     for event in pygame.event.get():
         if event.type == pygame.QUIT:

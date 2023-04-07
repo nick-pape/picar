@@ -20,7 +20,7 @@ def main(args):
         args = args
     ) if not args.mock else Client(
         drive = MockFourWheelDrivetrain(),
-        camera = MockCamera(),
+        camera = Camera(),
         args = args
     )
 
